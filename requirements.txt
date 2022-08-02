@@ -35,3 +35,4 @@ safe-eth-py[django]==4.1.2
 web3==5.29.2
 pilkit==2.0
 jmespath==1.0.1
+jsonschema==4.9.0
