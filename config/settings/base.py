@@ -48,7 +48,7 @@ SSO_ENABLED = False
 # ------------------------------------------------------------------------------
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 DATABASES = {
-    "default": env("DATABASE_URL"),
+    "default": env("DATABASE_URL", default="psql://postgres:postgres@127.0.0.1:5432/postgres"),
 }
 DATABASES["default"]["ATOMIC_REQUESTS"] = False
 DATABASES["default"]["ENGINE"] = "django_db_geventpool.backends.postgresql_psycopg2"
