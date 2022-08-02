@@ -1,8 +1,5 @@
 version: '3.5'
 services:
-  rabbitmq:
-    image: rabbitmq:alpine
-
   web:
     build:
       context: .
@@ -23,8 +20,6 @@ services:
     environment:
       RUN_MIGRATIONS: 1
       WORKER_QUEUES: "default,indexing"
-    depends_on:
-      - rabbitmq
     command: docker/web/celery/worker/run.sh
 
   contracts-tokens-worker:
