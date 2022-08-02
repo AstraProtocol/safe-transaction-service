@@ -218,7 +218,7 @@ INSTALLED_APPS += [
 ]
 
 # http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-broker_url
-CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="django://")
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="amqp://astra:astra123@localhost//")
 # https://docs.celeryproject.org/en/stable/userguide/optimizing.html#broker-connection-pools
 # https://docs.celeryq.dev/en/latest/userguide/optimizing.html#broker-connection-pools
 CELERY_BROKER_POOL_LIMIT = env(
