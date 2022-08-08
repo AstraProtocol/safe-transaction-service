@@ -11,6 +11,12 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
 # DATABASES
 # ------------------------------------------------------------------------------
 # DATABASES['default'] = env.db('DATABASE_URL')  # noqa F405
+import dj_database_url
+
+DATABASES = {
+    "default": dj_database_url.config(default=env("DATABASE_URL"))
+}
+
 DATABASES["default"]["ATOMIC_REQUESTS"] = False  # noqa F405
 
 REDIS_URL = env("REDIS_URL", default="redis://redis:6379/0")
