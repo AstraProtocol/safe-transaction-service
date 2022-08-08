@@ -4,6 +4,8 @@ Base settings to build other settings files upon.
 
 from pathlib import Path
 
+import dj_database_url
+
 import environ
 from corsheaders.defaults import default_headers as default_cors_headers
 
@@ -48,7 +50,7 @@ SSO_ENABLED = False
 # ------------------------------------------------------------------------------
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 DATABASES = {
-    "default": env.db("DATABASE_URL"),
+    "default": dj_database_url.config(default=env.db("DATABASE_URL")),
 }
 
 DATABASES["default"]["ATOMIC_REQUESTS"] = False
