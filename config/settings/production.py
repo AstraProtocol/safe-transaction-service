@@ -14,7 +14,7 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
 import dj_database_url
 
 DATABASES = {
-    "default": dj_database_url.config(default=env("DATABASE_URL"))
+    "default": dj_database_url.config(default=env.db('DATABASE_URL'))
 }
 
 DATABASES["default"]["ATOMIC_REQUESTS"] = False  # noqa F405
