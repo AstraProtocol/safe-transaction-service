@@ -444,8 +444,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Setting up Safe Contract Addresses"))
         ethereum_client = EthereumClientProvider()
         ethereum_network = ethereum_client.get_network()
-        self.style.SUSSESS("ethereum_network %s" % ethereum_network)
+        print("ethereum_network", ethereum_network)
         if ethereum_network in MASTER_COPIES:
+            print("hoank pass")
             self.stdout.write(
                 self.style.SUCCESS(f"Setting up {ethereum_network.name} safe addresses")
             )
