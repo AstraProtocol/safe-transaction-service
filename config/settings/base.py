@@ -4,8 +4,6 @@ Base settings to build other settings files upon.
 
 from pathlib import Path
 
-import dj_database_url
-
 import environ
 from corsheaders.defaults import default_headers as default_cors_headers
 
@@ -50,9 +48,15 @@ SSO_ENABLED = False
 # ------------------------------------------------------------------------------
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 DATABASES = {
-    "default": dj_database_url.config(default=env.db("DATABASE_URL")),
+    "default": {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'astra',
+        'USER': 'astra',
+        'PASSWORD': env("DB_PASSWORD"),
+        'HOST': env("DB_HOST"),
+        'PORT': env("DB_PORT"),
+    }
 }
-
 DATABASES["default"]["ATOMIC_REQUESTS"] = False
 DATABASES["default"]["ENGINE"] = "django_db_geventpool.backends.postgresql_psycopg2"
 DATABASES["default"]["CONN_MAX_AGE"] = 0
