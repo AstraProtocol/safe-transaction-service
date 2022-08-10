@@ -1,7 +1,7 @@
 import logging
 
 import requests
-
+import json
 from .exceptions import CannotGetPrice
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ class TikiExchangeClient:
         url = f"https://api.tiki.vn/sandseel/api/v2/public/markets/astra/summary"
         try:
             response = self.http_session.get(url, timeout=10)
-            api_json = response.json()
+            api_json = json.loads(response.text)
             if not response.ok:
                 logger.warning("Cannot get price from url=%s", url)
                 raise CannotGetPrice(api_json.get("msg"))
