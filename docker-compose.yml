@@ -18,6 +18,7 @@ services:
       dockerfile: docker/web/Dockerfile
     env_file:
       - .env
+    network_mode: "host"
     environment:
       RUN_MIGRATIONS: 1
       WORKER_QUEUES: "default,indexing"
