@@ -222,7 +222,7 @@ CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="amqp://astra:astra123@loca
 # https://docs.celeryproject.org/en/stable/userguide/optimizing.html#broker-connection-pools
 # https://docs.celeryq.dev/en/latest/userguide/optimizing.html#broker-connection-pools
 CELERY_BROKER_POOL_LIMIT = env(
-    "CELERY_BROKER_POOL_LIMIT", default=env("CELERYD_CONCURRENCY", default=1000)
+    "CELERY_BROKER_POOL_LIMIT", default=env("CELERYD_CONCURRENCY", default=500)
 )
 # http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-result_backend
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://")
@@ -238,7 +238,7 @@ CELERY_IGNORE_RESULT = True
 CELERY_ALWAYS_EAGER = False
 # https://docs.celeryproject.org/en/latest/userguide/configuration.html#task-default-priority
 # Higher = more priority on RabbitMQ, opposite on Redis ¯\_(ツ)_/¯
-CELERY_TASK_DEFAULT_PRIORITY = 5
+CELERY_TASK_DEFAULT_PRIORITY = 3
 # https://docs.celeryproject.org/en/stable/userguide/configuration.html#task-queue-max-priority
 CELERY_TASK_QUEUE_MAX_PRIORITY = 10
 # https://docs.celeryproject.org/en/latest/userguide/configuration.html#broker-transport-options
@@ -412,7 +412,7 @@ ETH_EVENTS_UPDATED_BLOCK_BEHIND = env.int(
 # ------------------------------------------------------------------------------
 # Number of blocks from the current block number needed to consider a transaction valid/stable
 ETH_REORG_BLOCKS = env.int(
-    "ETH_REORG_BLOCKS", default=100 if ETH_L2_NETWORK else 10
+    "ETH_REORG_BLOCKS", default=50 if ETH_L2_NETWORK else 10
 )  # L2 Networks have more reorgs
 
 # Tokens
