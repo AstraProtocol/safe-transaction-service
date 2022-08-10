@@ -43,6 +43,7 @@ from ..clients import (
     CoingeckoClient,
     KrakenClient,
     KucoinClient,
+    TikiExchangeClient,
 )
 from ..tasks import EthValueWithTimestamp, calculate_token_eth_price_task
 
@@ -91,6 +92,7 @@ class PriceService:
         self.yearn_oracle = YearnOracle(self.ethereum_client)
         self.enzyme_oracle = EnzymeOracle(self.ethereum_client)
         self.aave_oracle = AaveOracle(self.ethereum_client, self.uniswap_v2_oracle)
+        self.tiki_exchange_client = TikiExchangeClient()
         self.balancer_oracle = BalancerOracle(
             self.ethereum_client, self.uniswap_v2_oracle
         )
@@ -179,6 +181,16 @@ class PriceService:
             except CannotGetPrice:
                 return self.coingecko_client.get_matic_usd_price()
 
+    def get_astra_usd_price(self) -> float:
+        try:
+            usdt_price = self.coingecko_client.get_usdt_usd_price()
+            return self.tiki_exchange_client.get_asa_usd_price() / usdt_price
+        except CannotGetPrice:
+            try:
+                return self.tiki_exchange_client.get_asa_usd_price()
+            except CannotGetPrice:
+                return self.tiki_exchange_client.get_asa_usd_price()
+
     @cachedmethod(cache=operator.attrgetter("cache_eth_price"))
     @cache_memoize(60 * 30, prefix="balances-get_eth_usd_price")  # 30 minutes
     def get_native_coin_usd_price(self) -> float:
@@ -218,6 +230,8 @@ class PriceService:
             EthereumNetwork.ARBITRUM_TESTNET,
         ):
             return self.get_aurora_usd_price()
+        elif self.ethereum_network == EthereumNetwork.UNKNOWN:
+            return self.get_astra_usd_price()
         else:
             try:
                 return self.kraken_client.get_eth_usd_price()
