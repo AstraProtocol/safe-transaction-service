@@ -183,8 +183,7 @@ class PriceService:
 
     def get_astra_usd_price(self) -> float:
         try:
-            usdt_price = self.coingecko_client.get_usdt_usd_price()
-            return self.tiki_exchange_client.get_asa_usd_price() / usdt_price
+            return self.tiki_exchange_client.get_asa_usd_price()
         except CannotGetPrice:
             try:
                 return self.tiki_exchange_client.get_asa_usd_price()
