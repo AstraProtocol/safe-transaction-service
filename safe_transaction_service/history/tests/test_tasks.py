@@ -8,7 +8,9 @@ from django.utils import timezone
 import requests
 from eth_account import Account
 
-from gnosis.eth import EthereumClient, EthereumNetwork
+from gnosis.eth import EthereumClient
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+
 
 from ..models import SafeContract, SafeLastStatus, SafeStatus
 from ..services import IndexService

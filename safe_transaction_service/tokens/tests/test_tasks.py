@@ -9,9 +9,11 @@ from eth_account import Account
 
 from gnosis.eth.ethereum_client import (
     EthereumClient,
-    EthereumClientProvider,
-    EthereumNetwork,
+    EthereumClientProvider
 )
+
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+
 
 from ...history.tests.utils import just_test_if_mainnet_node
 from ...utils.redis import get_redis

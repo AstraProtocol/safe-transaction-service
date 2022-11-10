@@ -9,7 +9,7 @@ from celery import app
 from celery.utils.log import get_task_logger
 from eth_typing import ChecksumAddress
 
-from gnosis.eth.ethereum_client import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
 
 from safe_transaction_service.utils.ethereum import get_ethereum_network
 from safe_transaction_service.utils.redis import get_redis

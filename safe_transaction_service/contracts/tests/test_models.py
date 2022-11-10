@@ -16,7 +16,8 @@ from gnosis.eth.clients import (
     EtherscanClient,
     Sourcify,
 )
-from gnosis.eth.ethereum_client import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+
 from gnosis.eth.tests.clients.mocks import (
     etherscan_source_code_mock,
     sourcify_safe_metadata,

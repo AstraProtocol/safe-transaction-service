@@ -5,7 +5,9 @@ from django.test import TestCase
 
 from eth_account import Account
 
-from gnosis.eth import EthereumClient, EthereumNetwork
+from gnosis.eth import EthereumClient
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+
 from gnosis.eth.oracles import (
     KyberOracle,
     OracleException,

@@ -9,7 +9,9 @@ from django.test import TestCase
 
 from django_celery_beat.models import PeriodicTask
 
-from gnosis.eth.ethereum_client import EthereumClient, EthereumNetwork
+from gnosis.eth.ethereum_client import EthereumClient
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+
 
 from ..indexers import InternalTxIndexer, SafeEventsIndexer
 from ..models import ProxyFactory, SafeMasterCopy

@@ -1,6 +1,8 @@
 from functools import cache
 
-from gnosis.eth import EthereumClientProvider, EthereumNetwork
+from gnosis.eth import EthereumClientProvider
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+
 
 
 @cache

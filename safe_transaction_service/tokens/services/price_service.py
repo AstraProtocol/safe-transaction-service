@@ -15,7 +15,7 @@ from redis import Redis
 
 from gnosis.eth import EthereumClient, EthereumClientProvider
 from gnosis.eth.constants import NULL_ADDRESS
-from gnosis.eth.ethereum_client import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
 from gnosis.eth.oracles import (
     AaveOracle,
     BalancerOracle,
@@ -229,7 +229,7 @@ class PriceService:
             EthereumNetwork.ARBITRUM_TESTNET,
         ):
             return self.get_aurora_usd_price()
-        elif self.ethereum_network == EthereumNetwork.UNKNOWN:
+        elif self.ethereum_network == EthereumNetwork.ASTRA_TESTNET:
             return self.get_astra_usd_price()
         else:
             try:

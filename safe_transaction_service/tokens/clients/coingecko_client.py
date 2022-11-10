@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 import requests
 from eth_typing import ChecksumAddress
 
-from gnosis.eth import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
 
 from safe_transaction_service.tokens.clients.exceptions import (
     CannotGetPrice,

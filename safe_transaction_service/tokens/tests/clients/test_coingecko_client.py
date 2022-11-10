@@ -1,6 +1,7 @@
 from django.test import TestCase
 
-from gnosis.eth import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+
 
 from ...clients import CannotGetPrice
 from ...clients.coingecko_client import CoingeckoClient

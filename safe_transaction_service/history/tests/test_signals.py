@@ -6,7 +6,7 @@ from django.test import TestCase
 
 import factory
 
-from gnosis.eth import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
 
 from safe_transaction_service.notifications.tasks import send_notification_task
 

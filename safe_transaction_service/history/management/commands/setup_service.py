@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
 from gnosis.eth import EthereumClientProvider
-from gnosis.eth.ethereum_client import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
 
 from ...models import ProxyFactory, SafeMasterCopy
 
@@ -286,7 +286,7 @@ MASTER_COPIES: Dict[EthereumNetwork, List[Tuple[str, int, str]]] = {
         ("0xfb1bffC9d739B8D520DaF37dF666da4C687191EA", 93204, "1.3.0+L2"),
         ("0x69f4D1788e39c87893C980c06EdF4b7f686e2938", 93168, "1.3.0"),
     ],
-    EthereumNetwork.UNKNOWN: [
+    EthereumNetwork.ASTRA_TESTNET: [
         ("0x33eF3698B7E794B249E5C94DAFCAc7FED509C663", 3833012, "1.3.0+L2"),
         ("0x354B554d15Ede3D2Ba106aF24de98f132e1A53b6", 3833012, "1.3.0"),
     ],
@@ -414,7 +414,7 @@ PROXY_FACTORIES: Dict[EthereumNetwork, List[Tuple[str, int]]] = {
     EthereumNetwork.GODWOKEN_TESTNET: [
         ("0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC", 93108),  # v1.3.0
     ],
-    EthereumNetwork.UNKNOWN: [
+    EthereumNetwork.ASTRA_TESTNET: [
         ("0x9ede2D10e78c22919Bc3C22F53aeB6923Cb53FaE", 3833012),  # v1.3.0
     ],
 }

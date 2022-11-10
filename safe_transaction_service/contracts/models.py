@@ -26,7 +26,9 @@ from gnosis.eth.clients import (
     Sourcify,
 )
 from gnosis.eth.django.models import EthereumAddressV2Field, Keccak256Field
-from gnosis.eth.ethereum_client import EthereumClientProvider, EthereumNetwork
+from gnosis.eth.ethereum_client import EthereumClientProvider
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+
 from gnosis.eth.utils import fast_keccak
 
 logger = getLogger(__name__)

@@ -5,7 +5,7 @@ from django.test import TestCase
 from eth_utils import keccak
 from requests import Session
 
-from gnosis.eth.ethereum_client import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork
 
 from ...clients import EnsClient
 
