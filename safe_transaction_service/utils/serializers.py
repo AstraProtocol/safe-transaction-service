@@ -7,6 +7,8 @@ from web3.exceptions import BadFunctionCallOutput
 from gnosis.eth import EthereumClientProvider
 from gnosis.safe import Safe
 
+from safe_transaction_service.utils.ethereum_network import get_network
+
 
 def get_safe_owners(safe_address: ChecksumAddress) -> List[ChecksumAddress]:
     """
@@ -21,7 +23,7 @@ def get_safe_owners(safe_address: ChecksumAddress) -> List[ChecksumAddress]:
     except BadFunctionCallOutput as e:
         raise ValidationError(
             f"Could not get Safe {safe_address} owners from blockchain, check contract exists on network "
-            f"{ethereum_client.get_network().name}"
+            f"{get_network(ethereum_client.get_chain_id()).name}"
         ) from e
     except IOError:
         raise ValidationError(
@@ -43,7 +45,7 @@ def get_safe_version(safe_address: ChecksumAddress) -> str:
     except BadFunctionCallOutput as e:
         raise ValidationError(
             f"Could not get Safe {safe_address} version from blockchain, check contract exists on network "
-            f"{ethereum_client.get_network().name}"
+            f"{get_network(ethereum_client.get_chain_id()).name}"
         ) from e
     except IOError:
         raise ValidationError(

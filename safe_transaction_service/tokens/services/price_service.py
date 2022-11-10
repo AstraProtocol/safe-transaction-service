@@ -15,7 +15,7 @@ from redis import Redis
 
 from gnosis.eth import EthereumClient, EthereumClientProvider
 from gnosis.eth.constants import NULL_ADDRESS
-from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork, get_network
 from gnosis.eth.oracles import (
     AaveOracle,
     BalancerOracle,
@@ -77,7 +77,7 @@ class PriceServiceProvider:
 class PriceService:
     def __init__(self, ethereum_client: EthereumClient, redis: Redis):
         self.ethereum_client = ethereum_client
-        self.ethereum_network = self.ethereum_client.get_network()
+        self.ethereum_network = get_network(ethereum_client.get_chain_id())
         self.redis = redis
         self.binance_client = BinanceClient()
         self.coingecko_client = CoingeckoClient(self.ethereum_network)

@@ -210,3 +210,7 @@ class EthereumNetwork(Enum):
     @classmethod
     def _missing_(cls, value):
         return cls.UNKNOWN
+
+
+def get_network(chain_id) -> EthereumNetwork:
+    return EthereumNetwork(chain_id)

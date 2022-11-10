@@ -26,6 +26,7 @@ from safe_transaction_service.utils.redis import get_redis
 
 from ..exceptions import NodeConnectionException
 from ..models import ERC20Transfer, InternalTx, MultisigTransaction
+from ...utils.ethereum_network import get_network
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ class BalanceService:
         self, ethereum_client: EthereumClient, price_service: PriceService, redis: Redis
     ):
         self.ethereum_client = ethereum_client
-        self.ethereum_network = self.ethereum_client.get_network()
+        self.ethereum_network = get_network(ethereum_client.get_chain_id())
         self.price_service = price_service
         self.redis = redis
         self.cache_token_info = TTLCache(

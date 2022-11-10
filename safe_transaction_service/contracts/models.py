@@ -27,7 +27,7 @@ from gnosis.eth.clients import (
 )
 from gnosis.eth.django.models import EthereumAddressV2Field, Keccak256Field
 from gnosis.eth.ethereum_client import EthereumClientProvider
-from safe_transaction_service.utils.ethereum_network import EthereumNetwork
+from safe_transaction_service.utils.ethereum_network import EthereumNetwork, get_network
 
 from gnosis.eth.utils import fast_keccak
 
@@ -195,7 +195,7 @@ class Contract(models.Model):  # Known contract addresses by the service
         :return: True if updated, False otherwise
         """
         ethereum_client = EthereumClientProvider()
-        network = network or ethereum_client.get_network()
+        network = network or get_network(ethereum_client.get_chain_id())
         sourcify = Sourcify(network)
 
         try:

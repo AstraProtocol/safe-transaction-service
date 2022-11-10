@@ -8,6 +8,7 @@ from requests import RequestException
 from gnosis.eth import EthereumClientProvider
 
 from safe_transaction_service import __version__
+from safe_transaction_service.utils.ethereum_network import get_network
 
 
 class Command(BaseCommand):
@@ -16,7 +17,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         ethereum_client = EthereumClientProvider()
         app_name = apps.get_app_config("history").verbose_name
-        network_name = ethereum_client.get_network().name.capitalize()
+        network_name = get_network(ethereum_client.get_chain_id()).name.capitalize()
         startup_message = f"Starting {app_name} version {__version__} on {network_name}"
         self.stdout.write(self.style.SUCCESS(startup_message))
 

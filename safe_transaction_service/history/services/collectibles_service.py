@@ -28,6 +28,7 @@ from safe_transaction_service.utils.utils import chunks
 from ..clients import EnsClient
 from ..exceptions import NodeConnectionException
 from ..models import ERC721Transfer
+from ...utils.ethereum_network import get_network
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ class CollectiblesService:
 
     def __init__(self, ethereum_client: EthereumClient, redis: Redis):
         self.ethereum_client = ethereum_client
-        self.ethereum_network = ethereum_client.get_network()
+        self.ethereum_network = get_network(ethereum_client.get_chain_id())
         self.redis = redis
         self.ens_service: EnsClient = EnsClient(self.ethereum_network.value)
 
