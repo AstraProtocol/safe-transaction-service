@@ -11,7 +11,7 @@ from rest_framework import permissions
 
 schema_view = get_schema_view(
     openapi.Info(
-        title="Gnosis Safe Transaction Service API",
+        title="Safe Transaction Service API",
         default_version="v1",
         description="API to keep track of transactions sent via Gnosis Safe smart contracts",
         contact=openapi.Contact(email="safe@gnosis.io"),
@@ -55,13 +55,27 @@ urlpatterns_v1 = [
         ),
     ),
     path(
+        "",
+        include(
+            "safe_transaction_service.safe_messages.urls", namespace="safe_messages"
+        ),
+    ),
+    path(
         "tokens/", include("safe_transaction_service.tokens.urls", namespace="tokens")
     ),
+    path(
+        "analytics/",
+        include("safe_transaction_service.analytics.urls", namespace="analytics"),
+    ),
+]
+urlpatterns_v2 = [
+    path("", include("safe_transaction_service.history.urls_v2", namespace="history"))
 ]
 
 urlpatterns = swagger_urlpatterns + [
     path(settings.ADMIN_URL, admin.site.urls),
     path("api/v1/", include((urlpatterns_v1, "v1"))),
+    path("api/v2/", include((urlpatterns_v2, "v2"))),
     path("check/", lambda request: HttpResponse("Ok"), name="check"),
 ]
 

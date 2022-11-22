@@ -24,7 +24,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, models, transaction
-from django.db.models import Case, Count, Index, JSONField, Max, Q, QuerySet
+from django.db.models import Case, Count, Exists, Index, JSONField, Max, Q, QuerySet
 from django.db.models.expressions import F, OuterRef, RawSQL, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.db.models.signals import post_save
@@ -501,7 +501,10 @@ class ERC20Transfer(TokenTransfer):
 
 class ERC721TransferManager(TokenTransferManager):
     def erc721_owned_by(
-        self, address: ChecksumAddress
+        self,
+        address: ChecksumAddress,
+        only_trusted: Optional[bool] = None,
+        exclude_spam: Optional[bool] = None,
     ) -> List[Tuple[ChecksumAddress, int]]:
         """
         Returns erc721 owned by address, removing the ones sent
@@ -509,32 +512,39 @@ class ERC721TransferManager(TokenTransferManager):
         :return: List of tuples(token_address: str, token_id: int)
         """
 
+        owned_by_query = """
+        SELECT Q1.address, Q1.token_id
+        FROM (SELECT address,
+                     token_id,
+                     Count(*) AS count
+              FROM   history_erc721transfer
+              WHERE  "to" = %s AND "to" != "_from"
+              GROUP  BY address,
+                        token_id) Q1
+             LEFT JOIN (SELECT address,
+                               token_id,
+                               Count(*) AS count
+                        FROM   history_erc721transfer
+                        WHERE  "_from" = %s AND "to" != "_from"
+                        GROUP  BY address,
+                                  token_id) Q2
+                    ON Q1.address = Q2.address
+                       AND Q1.token_id = Q2.token_id
+        WHERE Q1.count > COALESCE(Q2.count, 0)
+        """
+
+        if only_trusted:
+            owned_by_query += " AND Q1.address IN (SELECT address FROM tokens_token WHERE trusted = TRUE)"
+        elif exclude_spam:
+            owned_by_query += " AND Q1.address NOT IN (SELECT address FROM tokens_token WHERE spam = TRUE)"
+
+        # Sort by token `address`, then by `token_id` to be stable
+        owned_by_query += " ORDER BY Q1.address, Q2.token_id"
+
         with connection.cursor() as cursor:
             hex_address = HexBytes(address)
             # Queries all the ERC721 IN and all OUT and only returns the ones currently owned
-            cursor.execute(
-                """
-                SELECT Q1.address, Q1.token_id
-                FROM (SELECT address,
-                             token_id,
-                             Count(*) AS count
-                      FROM   history_erc721transfer
-                      WHERE  "to" = %s AND "to" != "_from"
-                      GROUP  BY address,
-                                token_id) Q1
-                     LEFT JOIN (SELECT address,
-                                       token_id,
-                                       Count(*) AS count
-                                FROM   history_erc721transfer
-                                WHERE  "_from" = %s AND "to" != "_from"
-                                GROUP  BY address,
-                                          token_id) Q2
-                            ON Q1.address = Q2.address
-                               AND Q1.token_id = Q2.token_id
-                WHERE Q1.count > COALESCE(Q2.count, 0)
-                """,
-                [hex_address, hex_address],
-            )
+            cursor.execute(owned_by_query, [hex_address, hex_address])
             return [
                 (fast_to_checksum_address(bytes(address)), int(token_id))
                 for address, token_id in cursor.fetchall()
@@ -919,16 +929,36 @@ class InternalTx(models.Model):
 
 
 class InternalTxDecodedManager(BulkCreateSignalMixin, models.Manager):
-    pass
+    def out_of_order_for_safe(self, safe_address: ChecksumAddress):
+        """
+        :param safe_address:
+        :return: `True` if there are transactions out of order (processed transactions newer
+            than no processed transactions, due to a reindex), `False` otherwise
+        """
+
+        return (
+            self.for_safe(safe_address)
+            .not_processed()
+            .filter(
+                internal_tx__block_number__lt=self.for_safe(safe_address)
+                .processed()
+                .order_by("-internal_tx__block_number")
+                .values("internal_tx__block_number")[:1]
+            )
+            .exists()
+        )
 
 
 class InternalTxDecodedQuerySet(models.QuerySet):
-    def for_safe(self, safe_address: str):
+    def for_safe(self, safe_address: ChecksumAddress):
         """
         :param safe_address:
         :return: Queryset of all InternalTxDecoded for one Safe with `safe_address`
         """
         return self.filter(internal_tx___from=safe_address)
+
+    def processed(self):
+        return self.filter(processed=True)
 
     def not_processed(self):
         return self.filter(processed=False)
@@ -955,7 +985,7 @@ class InternalTxDecodedQuerySet(models.QuerySet):
         """
         return self.not_processed().order_by_processing_queue()
 
-    def pending_for_safe(self, safe_address: str):
+    def pending_for_safe(self, safe_address: ChecksumAddress):
         """
         :return: Pending `InternalTxDecoded` sorted by block number and then transaction index inside the block
         """
@@ -1060,7 +1090,8 @@ class MultisigTransactionManager(models.Manager):
             owners_set.update(owners_list)
 
         return (
-            MultisigTransaction.objects.filter(
+            self.executed()
+            .filter(
                 safe=safe,
                 confirmations__owner__in=owners_set,
                 confirmations__signature_type__in=[
@@ -1068,7 +1099,6 @@ class MultisigTransactionManager(models.Manager):
                     SafeSignatureType.ETH_SIGN.value,
                 ],
             )
-            .exclude(ethereum_tx=None)
             .order_by("-nonce")
             .first()
         )
@@ -1101,8 +1131,9 @@ class MultisigTransactionManager(models.Manager):
         :return:
         """
         return (
-            self.exclude(data=None)
-            .exclude(to__in=Contract.objects.values("address"))
+            self.trusted()
+            .exclude(data=None)
+            .exclude(Exists(Contract.objects.filter(address=OuterRef("to"))))
             .values_list("to", flat=True)
             .distinct()
         )
@@ -1118,11 +1149,31 @@ class MultisigTransactionQuerySet(models.QuerySet):
     def not_executed(self):
         return self.filter(ethereum_tx=None)
 
+    def with_data(self):
+        return self.exclude(data=None)
+
+    def without_data(self):
+        return self.filter(data=None)
+
     def with_confirmations(self):
         return self.exclude(confirmations__isnull=True)
 
     def without_confirmations(self):
         return self.filter(confirmations__isnull=True)
+
+    def trusted(self):
+        return self.filter(trusted=True)
+
+    def multisend(self):
+        # TODO Use MultiSend.MULTISEND_ADDRESSES + MultiSend MULTISEND_CALL_ONLY_ADDRESSES
+        return self.filter(
+            to__in=[
+                "0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761",  # MultiSend v1.3.0
+                "0x998739BFdAAdde7C933B942a68053933098f9EDa",  # MultiSend v1.3.0 (EIP-155)
+                "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",  # MultiSend Call Only v1.3.0
+                "0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B",  # MultiSend Call Only v1.3.0 (EIP-155)
+            ]
+        )
 
     def with_confirmations_required(self):
         """
@@ -1175,20 +1226,20 @@ class MultisigTransaction(TimeStampedModel):
     )
     to = EthereumAddressV2Field(null=True, db_index=True)
     value = Uint256Field()
-    data = models.BinaryField(null=True)
+    data = models.BinaryField(null=True, blank=True, editable=True)
     operation = models.PositiveSmallIntegerField(
         choices=[(tag.value, tag.name) for tag in SafeOperation]
     )
     safe_tx_gas = Uint256Field()
     base_gas = Uint256Field()
     gas_price = Uint256Field()
-    gas_token = EthereumAddressV2Field(null=True)
-    refund_receiver = EthereumAddressV2Field(null=True)
-    signatures = models.BinaryField(null=True)  # When tx is executed
+    gas_token = EthereumAddressV2Field(null=True, blank=True)
+    refund_receiver = EthereumAddressV2Field(null=True, blank=True)
+    signatures = models.BinaryField(null=True, blank=True)  # When tx is executed
     nonce = Uint256Field(db_index=True)
-    failed = models.BooleanField(null=True, default=None, db_index=True)
+    failed = models.BooleanField(null=True, blank=True, default=None, db_index=True)
     origin = models.CharField(
-        null=True, default=None, max_length=200
+        null=True, blank=True, default=None, max_length=200
     )  # To store arbitrary data on the tx
     trusted = models.BooleanField(
         default=False, db_index=True
@@ -1242,7 +1293,7 @@ class ModuleTransactionManager(models.Manager):
         :return:
         """
         return (
-            self.exclude(module__in=Contract.objects.values("address"))
+            self.exclude(Exists(Contract.objects.filter(address=OuterRef("module"))))
             .values_list("module", flat=True)
             .distinct()
         )

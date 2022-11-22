@@ -1,4 +1,3 @@
-from django.http import Http404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
@@ -6,16 +5,16 @@ from django.views.decorators.cache import cache_page
 import django_filters.rest_framework
 from rest_framework import response, status
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.generics import GenericAPIView, ListAPIView, RetrieveAPIView
+from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
 
 from gnosis.eth.constants import NULL_ADDRESS
 from gnosis.eth.utils import fast_is_checksum_address
 
 from . import filters, serializers
+from .clients import CannotGetPrice
 from .models import Token
 from .services import PriceServiceProvider
-from .tasks import get_token_info_from_blockchain_task
 
 
 class TokenView(RetrieveAPIView):
@@ -23,7 +22,7 @@ class TokenView(RetrieveAPIView):
     lookup_field = "address"
     queryset = Token.objects.all()
 
-    @method_decorator(cache_page(60 * 60))  # Cache 1 hour, this should never change
+    @method_decorator(cache_page(60 * 60))  # Cache 1 hour, this does not change often
     def get(self, request, *args, **kwargs):
         address = self.kwargs["address"]
         if not fast_is_checksum_address(address):
@@ -36,11 +35,7 @@ class TokenView(RetrieveAPIView):
                 },
             )
 
-        try:
-            return super().get(request, *args, **kwargs)
-        except Http404 as exc:  # Try to get info about the token
-            get_token_info_from_blockchain_task.delay(address)
-            raise exc
+        return super().get(request, *args, **kwargs)
 
 
 class TokensView(ListAPIView):
@@ -61,7 +56,7 @@ class TokensView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
-class TokenPriceView(GenericAPIView):
+class TokenPriceView(RetrieveAPIView):
     serializer_class = serializers.TokenPriceResponseSerializer
     lookup_field = "address"
     queryset = Token.objects.all()
@@ -78,25 +73,34 @@ class TokenPriceView(GenericAPIView):
                     "arguments": [address],
                 },
             )
+        try:
+            price_service = PriceServiceProvider()
+            if address == NULL_ADDRESS:
+                data = {
+                    "fiat_code": "USD",
+                    "fiat_price": str(price_service.get_native_coin_usd_price()),
+                    "timestamp": timezone.now(),
+                }
+            else:
+                token = self.get_object()  # Raises 404 if not found
+                fiat_price_with_timestamp = next(
+                    price_service.get_cached_usd_values([token.get_price_address()])
+                )
+                data = {
+                    "fiat_code": fiat_price_with_timestamp.fiat_code.name,
+                    "fiat_price": str(fiat_price_with_timestamp.fiat_price),
+                    "timestamp": fiat_price_with_timestamp.timestamp,
+                }
+            serializer = self.get_serializer(data=data)
+            assert serializer.is_valid()
+            return Response(status=status.HTTP_200_OK, data=serializer.data)
 
-        price_service = PriceServiceProvider()
-        if address == NULL_ADDRESS:
-            data = {
-                "fiat_code": "USD",
-                "fiat_price": str(price_service.get_native_coin_usd_price()),
-                "timestamp": timezone.now(),
-            }
-        else:
-            token = self.get_object()  # Raises 404 if not found
-            fiat_price_with_timestamp = next(
-                price_service.get_cached_usd_values([token.get_price_address()])
+        except CannotGetPrice:
+            return Response(
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                data={
+                    "code": 10,
+                    "message": "Price retrieval failed",
+                    "arguments": [address],
+                },
             )
-            data = {
-                "fiat_code": fiat_price_with_timestamp.fiat_code.name,
-                "fiat_price": str(fiat_price_with_timestamp.fiat_price),
-                "timestamp": fiat_price_with_timestamp.timestamp,
-            }
-
-        serializer = self.get_serializer(data=data)
-        assert serializer.is_valid()
-        return Response(status=status.HTTP_200_OK, data=serializer.data)

@@ -50,8 +50,8 @@ SSO_ENABLED = False
 DATABASES = {
     "default": {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'astra',
-        'USER': 'astra',
+        'NAME': env("DB_NAME"),
+        'USER': env("DB_USER"),
         'PASSWORD': env("DB_PASSWORD"),
         'HOST': env("DB_HOST"),
         'PORT': env("DB_PORT"),
@@ -89,6 +89,7 @@ DJANGO_APPS = [
     # 'django.contrib.humanize', # Handy template tags
 ]
 THIRD_PARTY_APPS = [
+    "django_extensions",
     "corsheaders",
     "rest_framework",
     "drf_yasg",
@@ -99,6 +100,7 @@ LOCAL_APPS = [
     "safe_transaction_service.contracts.apps.ContractsConfig",
     "safe_transaction_service.history.apps.HistoryConfig",
     "safe_transaction_service.notifications.apps.NotificationsConfig",
+    "safe_transaction_service.safe_messages.apps.SafeMessagesConfig",
     "safe_transaction_service.tokens.apps.TokensConfig",
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -179,8 +181,10 @@ TEMPLATES = [
     },
 ]
 
+
 # CORS
-CORS_ORIGIN_ALLOW_ALL = True
+# ------------------------------------------------------------------------------
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = list(default_cors_headers) + [
     "if-match",
     "if-modified-since",
@@ -193,23 +197,10 @@ CORS_EXPOSE_HEADERS = ["etag"]
 # https://docs.djangoproject.com/en/dev/ref/settings/#fixture-dirs
 FIXTURE_DIRS = (str(APPS_DIR / "fixtures"),)
 
-# EMAIL
-# ------------------------------------------------------------------------------
-# https://docs.djangoproject.com/en/dev/ref/settings/#email-backend
-EMAIL_BACKEND = env(
-    "DJANGO_EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
-)
-
 # ADMIN
 # ------------------------------------------------------------------------------
 # Django Admin URL regex.
 ADMIN_URL = "admin/"
-# https://docs.djangoproject.com/en/dev/ref/settings/#admins
-ADMINS = [
-    ("Gnosis Safe team", "safe@gnosis.io"),
-]
-# https://docs.djangoproject.com/en/dev/ref/settings/#managers
-MANAGERS = ADMINS
 
 # Celery
 # ------------------------------------------------------------------------------
@@ -218,11 +209,11 @@ INSTALLED_APPS += [
 ]
 
 # http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-broker_url
-CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="amqp://astra:astra123@localhost//")
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="django://")
 # https://docs.celeryproject.org/en/stable/userguide/optimizing.html#broker-connection-pools
 # https://docs.celeryq.dev/en/latest/userguide/optimizing.html#broker-connection-pools
 CELERY_BROKER_POOL_LIMIT = env(
-    "CELERY_BROKER_POOL_LIMIT", default=env("CELERYD_CONCURRENCY", default=500)
+    "CELERY_BROKER_POOL_LIMIT", default=env("CELERYD_CONCURRENCY", default=1000)
 )
 # http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-result_backend
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://")
@@ -238,7 +229,7 @@ CELERY_IGNORE_RESULT = True
 CELERY_ALWAYS_EAGER = False
 # https://docs.celeryproject.org/en/latest/userguide/configuration.html#task-default-priority
 # Higher = more priority on RabbitMQ, opposite on Redis ¯\_(ツ)_/¯
-CELERY_TASK_DEFAULT_PRIORITY = 3
+CELERY_TASK_DEFAULT_PRIORITY = 5
 # https://docs.celeryproject.org/en/stable/userguide/configuration.html#task-queue-max-priority
 CELERY_TASK_QUEUE_MAX_PRIORITY = 10
 # https://docs.celeryproject.org/en/latest/userguide/configuration.html#broker-transport-options
@@ -246,6 +237,10 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {}
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#std-setting-task_routes
 CELERY_ROUTES = (
     [
+        (
+            "safe_transaction_service.history.tasks.retry_get_metadata_task",
+            {"queue": "tokens"},
+        ),
         (
             "safe_transaction_service.history.tasks.send_webhook_task",
             {"queue": "webhooks"},
@@ -381,12 +376,12 @@ LOGGING = {
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 
-# Ethereum
+# Ethereum RPC
 # ------------------------------------------------------------------------------
 ETHEREUM_NODE_URL = env("ETHEREUM_NODE_URL", default=None)
 ETHEREUM_TRACING_NODE_URL = env("ETHEREUM_TRACING_NODE_URL", default=None)
 ETH_INTERNAL_TXS_BLOCK_PROCESS_LIMIT = env.int(
-    "ETH_INTERNAL_TXS_BLOCK_PROCESS_LIMIT", default=10000
+    "ETH_INTERNAL_TXS_BLOCK_PROCESS_LIMIT", default=10_000
 )
 ETH_INTERNAL_NO_FILTER = env.bool("ETH_INTERNAL_NO_FILTER", default=False)
 ETH_INTERNAL_TRACE_TXS_BATCH_SIZE = env.int(
@@ -401,27 +396,32 @@ ETH_EVENTS_BLOCK_PROCESS_LIMIT = env.int(
 ETH_EVENTS_BLOCK_PROCESS_LIMIT_MAX = env.int(
     "ETH_EVENTS_BLOCK_PROCESS_LIMIT_MAX", default=0
 )  # Maximum number of blocks to process together when searching for events. 0 == no limit.
+ETH_EVENTS_GET_LOGS_CONCURRENCY = env.int(
+    "ETH_EVENTS_GET_LOGS_CONCURRENCY", default=20
+)  # Number of concurrent requests to `getLogs`
 ETH_EVENTS_QUERY_CHUNK_SIZE = env.int(
-    "ETH_EVENTS_QUERY_CHUNK_SIZE", default=0
-)  # Number of addresses 'almost updated' to update together. 0 == no limit
+    "ETH_EVENTS_QUERY_CHUNK_SIZE", default=1_000
+)  # Number of addresses to use as `getLogs` parameter. `0 == no limit`. By testing `1_000` looks like a good default
 ETH_EVENTS_UPDATED_BLOCK_BEHIND = env.int(
     "ETH_EVENTS_UPDATED_BLOCK_BEHIND", default=24 * 60 * 60 // 15
 )  # Number of blocks to consider an address 'almost updated'.
-
-# Safe
-# ------------------------------------------------------------------------------
-# Number of blocks from the current block number needed to consider a transaction valid/stable
 ETH_REORG_BLOCKS = env.int(
-    "ETH_REORG_BLOCKS", default=50 if ETH_L2_NETWORK else 10
-)  # L2 Networks have more reorgs
+    "ETH_REORG_BLOCKS", default=100 if ETH_L2_NETWORK else 10
+)  # Number of blocks from the current block number needed to consider a block valid/stable
 
 # Tokens
-TOKENS_LOGO_BASE_URI = env(
-    "TOKENS_LOGO_BASE_URI", default="https://gnosis-safe-token-logos.s3.amazonaws.com/"
+# ------------------------------------------------------------------------------
+TOKENS_LOGO_BASE_URI = env.str(
+    "TOKENS_LOGO_BASE_URI", default="https://tokens-logo.localhost/"
+)  # Used if AWS_S3_PUBLIC_URL is not defined
+TOKENS_LOGO_EXTENSION = env.str("TOKENS_LOGO_EXTENSION", default=".png")
+TOKENS_ENS_IMAGE_URL = env.str(
+    "TOKENS_ENS_IMAGE_URL",
+    default="https://safe-transaction-assets.safe.global/tokens/logos/ENS.png",
 )
-TOKENS_LOGO_EXTENSION = env("TOKENS_LOGO_EXTENSION", default=".png")
 
-# Slack notifications
+# Notifications
+# ------------------------------------------------------------------------------
 SLACK_API_WEBHOOK = env("SLACK_API_WEBHOOK", default=None)
 
 # Notifications
@@ -440,9 +440,11 @@ if NOTIFICATIONS_FIREBASE_CREDENTIALS_PATH:
 # Percentage of Safes allowed to be out of sync without alerting. By default 10%
 ALERT_OUT_OF_SYNC_EVENTS_THRESHOLD = env.float(
     "ALERT_OUT_OF_SYNC_EVENTS_THRESHOLD", default=0.1
-)
+)  # Percentage of Safes allowed to be out of sync without alerting. By default 10%
+
 
 # AWS S3 https://github.com/etianen/django-s3-storage
+# ------------------------------------------------------------------------------
 # AWS_QUERYSTRING_AUTH = False  # Remove query parameter authentication from generated URLs
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
 AWS_S3_PUBLIC_URL = env(
@@ -457,7 +459,7 @@ AWS_CONFIGURED = bool(
 )
 
 ETHERSCAN_API_KEY = env("ETHERSCAN_API_KEY", default=None)
-IPFS_GATEWAY = env("IPFS_GATEWAY", default="https://cloudflare-ipfs.com/ipfs/")
+IPFS_GATEWAY = env("IPFS_GATEWAY", default="https://ipfs.io/ipfs/")
 
 SWAGGER_SETTINGS = {
     "SECURITY_DEFINITIONS": {

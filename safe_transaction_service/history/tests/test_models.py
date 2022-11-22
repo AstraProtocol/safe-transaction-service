@@ -16,6 +16,7 @@ from gnosis.safe.safe_signature import SafeSignatureType
 from safe_transaction_service.contracts.models import ContractQuerySet
 from safe_transaction_service.contracts.tests.factories import ContractFactory
 
+from ...tokens.tests.factories import TokenFactory
 from ..models import (
     ERC20Transfer,
     ERC721Transfer,
@@ -176,6 +177,16 @@ class TestMultisigTransaction(TestCase):
         )["signature"]
         multisig_transaction.save()
         self.assertEqual(multisig_transaction.owners, [account.address])
+
+    def test_multisend(self):
+        self.assertEqual(MultisigTransaction.objects.multisend().count(), 0)
+        MultisigTransactionFactory()
+
+        MultisigTransactionFactory(to="0x998739BFdAAdde7C933B942a68053933098f9EDa")
+        self.assertEqual(MultisigTransaction.objects.multisend().count(), 1)
+
+        MultisigTransactionFactory(to="0x40A2aCCbd92BCA938b02010E17A5b8929b49130D")
+        self.assertEqual(MultisigTransaction.objects.multisend().count(), 2)
 
     def test_queued(self):
         safe_address = Account.create().address
@@ -414,6 +425,46 @@ class TestTokenTransfer(TestCase):
             len(ERC721Transfer.objects.erc721_owned_by(address=random_address)), 1
         )
 
+    def test_erc721_owned_by_trusted_spam(self):
+        random_address = Account.create().address
+        self.assertEqual(
+            ERC721Transfer.objects.erc721_owned_by(address=random_address), []
+        )
+        erc721_transfer = ERC721TransferFactory(to=random_address)
+        erc721_transfer_2 = ERC721TransferFactory(to=random_address)
+        token = TokenFactory(address=erc721_transfer.address, spam=True)
+        self.assertEqual(
+            len(ERC721Transfer.objects.erc721_owned_by(address=random_address)), 2
+        )
+        self.assertEqual(
+            len(
+                ERC721Transfer.objects.erc721_owned_by(
+                    address=random_address, exclude_spam=True
+                )
+            ),
+            1,
+        )
+
+        self.assertEqual(
+            len(
+                ERC721Transfer.objects.erc721_owned_by(
+                    address=random_address, only_trusted=True
+                )
+            ),
+            0,
+        )
+        token.trusted = True
+        token.spam = False
+        token.save(update_fields=["trusted", "spam"])
+        self.assertEqual(
+            len(
+                ERC721Transfer.objects.erc721_owned_by(
+                    address=random_address, only_trusted=True
+                )
+            ),
+            1,
+        )
+
 
 class TestInternalTx(TestCase):
     def test_ether_and_token_txs(self):
@@ -633,6 +684,51 @@ class TestInternalTxDecoded(TestCase):
         self.assertCountEqual(
             InternalTxDecoded.objects.safes_pending_to_be_processed(), [safe_address_1]
         )
+
+    def test_out_of_order_for_safe(self):
+        random_safe = Account.create().address
+        self.assertFalse(InternalTxDecoded.objects.out_of_order_for_safe(random_safe))
+
+        i = InternalTxDecodedFactory(
+            internal_tx___from=random_safe,
+            internal_tx__block_number=10,
+            processed=False,
+        )
+        self.assertFalse(InternalTxDecoded.objects.out_of_order_for_safe(random_safe))
+
+        i.set_processed()
+        self.assertFalse(InternalTxDecoded.objects.out_of_order_for_safe(random_safe))
+
+        InternalTxDecodedFactory(
+            internal_tx___from=random_safe,
+            internal_tx__block_number=11,
+            processed=False,
+        )
+        self.assertFalse(InternalTxDecoded.objects.out_of_order_for_safe(random_safe))
+
+        InternalTxDecodedFactory(
+            internal_tx___from=random_safe, internal_tx__block_number=9, processed=False
+        )
+        self.assertTrue(InternalTxDecoded.objects.out_of_order_for_safe(random_safe))
+        i.processed = False
+        i.save(update_fields=["processed"])
+
+        self.assertFalse(InternalTxDecoded.objects.out_of_order_for_safe(random_safe))
+
+        InternalTxDecodedFactory(
+            internal_tx___from=random_safe, internal_tx__block_number=8, processed=True
+        )
+        self.assertFalse(InternalTxDecoded.objects.out_of_order_for_safe(random_safe))
+
+        InternalTxDecodedFactory(
+            internal_tx___from=random_safe, internal_tx__block_number=9, processed=True
+        )
+        self.assertFalse(InternalTxDecoded.objects.out_of_order_for_safe(random_safe))
+
+        InternalTxDecodedFactory(
+            internal_tx___from=random_safe, internal_tx__block_number=10, processed=True
+        )
+        self.assertTrue(InternalTxDecoded.objects.out_of_order_for_safe(random_safe))
 
 
 class TestLastSafeStatus(TestCase):
@@ -1206,17 +1302,19 @@ class TestMultisigTransactions(TestCase):
         )
 
     def test_not_indexed_metadata_contract_addresses(self):
+        # Transaction must be trusted
+        MultisigTransactionFactory(data=b"12")
         self.assertFalse(
             MultisigTransaction.objects.not_indexed_metadata_contract_addresses()
         )
 
-        MultisigTransactionFactory(data=None)
+        MultisigTransactionFactory(trusted=True, data=None)
         self.assertFalse(
             MultisigTransaction.objects.not_indexed_metadata_contract_addresses()
         )
-        multisig_transaction = MultisigTransactionFactory(data=b"12")
+        multisig_transaction = MultisigTransactionFactory(trusted=True, data=b"12")
         MultisigTransactionFactory(
-            data=b"12", to=multisig_transaction.to
+            trusted=True, data=b"12", to=multisig_transaction.to
         )  # Check distinct
         self.assertCountEqual(
             MultisigTransaction.objects.not_indexed_metadata_contract_addresses(),

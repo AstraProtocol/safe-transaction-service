@@ -36,7 +36,7 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
 
     def test_safe_events_indexer_provider(self):
         safe_events_indexer = SafeEventsIndexerProvider()
-        self.assertGreater(safe_events_indexer.confirmations, 0)
+        self.assertEqual(safe_events_indexer.confirmations, 0)
         self.assertGreater(safe_events_indexer.blocks_to_reindex_again, 0)
         self.assertIsNotNone(SafeEventsIndexerProvider.instance)
         SafeEventsIndexerProvider.del_singleton()
@@ -152,7 +152,7 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
                 payment_token,
                 payment,
                 payment_receiver,
-            ).buildTransaction({"gas": 1, "gasPrice": 1})["data"]
+            ).build_transaction({"gas": 1, "gasPrice": 1})["data"]
         )
         initial_block_number = self.ethereum_client.current_block_number
         safe_l2_master_copy = SafeMasterCopyFactory(
@@ -210,7 +210,7 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
         data = HexBytes(
             self.safe_contract.functions.addOwnerWithThreshold(
                 owner_account_2.address, 1
-            ).buildTransaction({"gas": 1, "gasPrice": 1})["data"]
+            ).build_transaction({"gas": 1, "gasPrice": 1})["data"]
         )
 
         multisig_tx = safe.build_multisig_tx(safe_address, 0, data)
@@ -247,7 +247,7 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
 
         # Change threshold (nonce: 1) ------------------------------------------------------------------------------
         data = HexBytes(
-            self.safe_contract.functions.changeThreshold(2).buildTransaction(
+            self.safe_contract.functions.changeThreshold(2).build_transaction(
                 {"gas": 1, "gasPrice": 1}
             )["data"]
         )
@@ -285,7 +285,7 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
         data = HexBytes(
             self.safe_contract.functions.removeOwner(
                 SENTINEL_ADDRESS, owner_account_2.address, 1
-            ).buildTransaction({"gas": 1, "gasPrice": 1})["data"]
+            ).build_transaction({"gas": 1, "gasPrice": 1})["data"]
         )
 
         multisig_tx = safe.build_multisig_tx(safe_address, 0, data)
@@ -332,7 +332,7 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
         # Enable module (nonce: 3) ---------------------------------------------------------------------
         module_address = Account.create().address
         data = HexBytes(
-            self.safe_contract.functions.enableModule(module_address).buildTransaction(
+            self.safe_contract.functions.enableModule(module_address).build_transaction(
                 {"gas": 1, "gasPrice": 1}
             )["data"]
         )
@@ -388,7 +388,7 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
         data = HexBytes(
             self.safe_contract.functions.setFallbackHandler(
                 new_fallback_handler
-            ).buildTransaction({"gas": 1, "gasPrice": 1})["data"]
+            ).build_transaction({"gas": 1, "gasPrice": 1})["data"]
         )
 
         multisig_tx = safe.build_multisig_tx(safe_address, 0, data)
@@ -426,7 +426,7 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
         data = HexBytes(
             self.safe_contract.functions.disableModule(
                 SENTINEL_ADDRESS, module_address
-            ).buildTransaction({"gas": 1, "gasPrice": 1})["data"]
+            ).build_transaction({"gas": 1, "gasPrice": 1})["data"]
         )
 
         multisig_tx = safe.build_multisig_tx(safe_address, 0, data)
@@ -460,17 +460,13 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
 
         # ApproveHash (no nonce) ------------------------------------------------------------------------------------
         random_hash = self.w3.keccak(text="Get schwifty")
-        tx = (
-            safe.get_contract()
-            .functions.approveHash(random_hash)
-            .buildTransaction(
-                {
-                    "from": owner_account_1.address,
-                    "nonce": self.ethereum_client.get_nonce_for_account(
-                        owner_account_1.address
-                    ),
-                }
-            )
+        tx = safe.contract.functions.approveHash(random_hash).build_transaction(
+            {
+                "from": owner_account_1.address,
+                "nonce": self.ethereum_client.get_nonce_for_account(
+                    owner_account_1.address
+                ),
+            }
         )
         tx = owner_account_1.sign_transaction(tx)
         self.w3.eth.send_raw_transaction(tx["rawTransaction"])
@@ -524,7 +520,7 @@ class TestSafeEventsIndexer(SafeTestCaseMixin, TestCase):
         # Set guard (nonce: 7) INVALIDATES SAFE, as no more transactions can be done ---------------------------------
         guard_address = Account.create().address
         data = HexBytes(
-            self.safe_contract.functions.setGuard(guard_address).buildTransaction(
+            self.safe_contract.functions.setGuard(guard_address).build_transaction(
                 {"gas": 1, "gasPrice": 1}
             )["data"]
         )

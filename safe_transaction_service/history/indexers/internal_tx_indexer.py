@@ -2,6 +2,7 @@ from collections import OrderedDict
 from logging import getLogger
 from typing import Dict, Generator, Iterable, List, Optional, Sequence, Set
 
+from django.conf import settings
 from django.db import transaction
 
 from eth_typing import HexStr
@@ -26,9 +27,6 @@ class InternalTxIndexerProvider:
         if not hasattr(cls, "instance"):
             from django.conf import settings
 
-            block_process_limit: int = settings.ETH_INTERNAL_TXS_BLOCK_PROCESS_LIMIT
-            trace_txs_batch_size: int = settings.ETH_INTERNAL_TRACE_TXS_BATCH_SIZE
-            blocks_to_reindex_again = 6
             if settings.ETH_INTERNAL_NO_FILTER:
                 instance_class = InternalTxIndexerWithTraceBlock
             else:
@@ -36,9 +34,6 @@ class InternalTxIndexerProvider:
 
             cls.instance = instance_class(
                 EthereumClient(settings.ETHEREUM_TRACING_NODE_URL),
-                block_process_limit=block_process_limit,
-                blocks_to_reindex_again=blocks_to_reindex_again,
-                trace_txs_batch_size=trace_txs_batch_size,
             )
         return cls.instance
 
@@ -50,12 +45,17 @@ class InternalTxIndexerProvider:
 
 class InternalTxIndexer(EthereumIndexer):
     def __init__(self, *args, **kwargs):
-        self.tx_decoder = get_safe_tx_decoder()
-        self.number_trace_blocks = (
+        kwargs.setdefault(
+            "block_process_limit", settings.ETH_INTERNAL_TXS_BLOCK_PROCESS_LIMIT
+        )
+        kwargs.setdefault("blocks_to_reindex_again", 6)
+        super().__init__(*args, **kwargs)
+
+        self.trace_txs_batch_size: int = settings.ETH_INTERNAL_TRACE_TXS_BATCH_SIZE
+        self.number_trace_blocks: int = (
             10  # Use `trace_block` for last `number_trace_blocks` blocks indexing
         )
-        self.trace_txs_batch_size: int = kwargs.pop("trace_txs_batch_size")
-        super().__init__(*args, **kwargs)
+        self.tx_decoder = get_safe_tx_decoder()
 
     @property
     def database_field(self):
@@ -119,9 +119,11 @@ class InternalTxIndexer(EthereumIndexer):
         addresses_set = set(addresses)  # More optimal to use with `in`
         try:
             block_numbers = list(range(from_block_number, to_block_number + 1))
-            blocks_traces: ParityBlockTrace = self.ethereum_client.parity.trace_blocks(
-                block_numbers
-            )
+
+            with self.auto_adjust_block_limit(from_block_number, to_block_number):
+                blocks_traces: ParityBlockTrace = (
+                    self.ethereum_client.parity.trace_blocks(block_numbers)
+                )
             traces: OrderedDict[HexStr, ParityFilterTrace] = OrderedDict()
             relevant_tx_hashes: Set[HexStr] = set()
             for block_number, block_traces in zip(block_numbers, blocks_traces):
@@ -170,11 +172,12 @@ class InternalTxIndexer(EthereumIndexer):
 
         try:
             # We only need to search for traces `to` the provided addresses
-            to_traces = self.ethereum_client.parity.trace_filter(
-                from_block=from_block_number,
-                to_block=to_block_number,
-                to_address=addresses,
-            )
+            with self.auto_adjust_block_limit(from_block_number, to_block_number):
+                to_traces = self.ethereum_client.parity.trace_filter(
+                    from_block=from_block_number,
+                    to_block=to_block_number,
+                    to_address=addresses,
+                )
         except IOError as e:
             raise FindRelevantElementsException(
                 "Request error calling `trace_filter`"

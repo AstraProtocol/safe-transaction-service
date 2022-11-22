@@ -20,14 +20,14 @@ urlpatterns = [
         "about/master-copies/", views.MasterCopiesView.as_view(), name="master-copies"
     ),
     path(
-        "analytics/multisig-transactions/by-safe/",
-        views.AnalyticsMultisigTxsBySafeListView.as_view(),
-        name="analytics-multisig-txs-by-safe",
+        "about/erc20-indexing/",
+        views.ERC20IndexingView.as_view(),
+        name="erc20-indexing",
     ),
     path(
-        "analytics/multisig-transactions/by-origin/",
-        views.AnalyticsMultisigTxsByOriginListView.as_view(),
-        name="analytics-multisig-txs-by-origin",
+        "about/indexing/",
+        views.IndexingView.as_view(),
+        name="indexing",
     ),
     path("data-decoder/", views.DataDecoderView.as_view(), name="data-decoder"),
     path("delegates/", views.DelegateListView.as_view(), name="delegates"),

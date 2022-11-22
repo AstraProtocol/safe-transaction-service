@@ -1,12 +1,13 @@
+import dataclasses
+import json
 import logging
 import operator
-from dataclasses import dataclass, field
+import random
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urljoin
 
 from django.conf import settings
 from django.core.cache import cache as django_cache
-from django.db.models import Q
 
 import gevent
 import requests
@@ -41,6 +42,10 @@ class MetadataRetrievalException(CollectiblesServiceException):
     pass
 
 
+class MetadataRetrievalExceptionTimeout(CollectiblesServiceException):
+    pass
+
+
 def ipfs_to_http(uri: Optional[str]) -> Optional[str]:
     if uri and uri.startswith("ipfs://"):
         uri = uri.replace("ipfs://ipfs/", "ipfs://")
@@ -50,7 +55,7 @@ def ipfs_to_http(uri: Optional[str]) -> Optional[str]:
     return uri
 
 
-@dataclass
+@dataclasses.dataclass
 class Erc721InfoWithLogo:
     """
     ERC721 info from Blockchain
@@ -71,7 +76,7 @@ class Erc721InfoWithLogo:
         )
 
 
-@dataclass
+@dataclasses.dataclass
 class Collectible:
     """
     Collectible built from ERC721InfoWithLogo
@@ -85,16 +90,16 @@ class Collectible:
     uri: str
 
 
-@dataclass
+@dataclasses.dataclass
 class CollectibleWithMetadata(Collectible):
     """
     Collectible with metadata parsed if possible
     """
 
     metadata: Dict[str, Any]
-    name: Optional[str] = field(init=False)
-    description: Optional[str] = field(init=False)
-    image_uri: Optional[str] = field(init=False)
+    name: Optional[str] = dataclasses.field(init=False)
+    description: Optional[str] = dataclasses.field(init=False)
+    image_uri: Optional[str] = dataclasses.field(init=False)
 
     def get_name(self) -> Optional[str]:
         if self.metadata:
@@ -144,10 +149,13 @@ class CollectiblesServiceProvider:
 
 
 class CollectiblesService:
-    ENS_IMAGE_URL = "https://gnosis-safe-token-logos.s3.amazonaws.com/ENS.png"
     METADATA_MAX_CONTENT_LENGTH = int(
         0.2 * 1024 * 1024
     )  # 0.2Mb is the maximum metadata size allowed
+    COLLECTIBLE_EXPIRATION = int(
+        60 * 60 * 24 * 2
+    )  # Keep collectibles by 2 days in cache
+    TOKEN_EXPIRATION = int(60 * 60)
 
     def __init__(self, ethereum_client: EthereumClient, redis: Redis):
         self.ethereum_client = ethereum_client
@@ -155,19 +163,14 @@ class CollectiblesService:
         self.redis = redis
         self.ens_service: EnsClient = EnsClient(self.ethereum_network.value)
 
-        self.cache_uri_metadata = TTLCache[str, Optional[Dict[str, Any]]](
-            maxsize=4096, ttl=60 * 60 * 24
-        )  # 1 day of caching
         self.cache_token_info: TTLCache[ChecksumAddress, Erc721InfoWithLogo] = TTLCache(
-            maxsize=4096, ttl=60 * 30
-        )  # 2 hours of caching
+            maxsize=4096, ttl=self.TOKEN_EXPIRATION
+        )
+        self.ens_image_url = settings.TOKENS_ENS_IMAGE_URL
 
-    @cachedmethod(cache=operator.attrgetter("cache_uri_metadata"))
-    @cache_memoize(
-        60 * 60 * 24,
-        prefix="collectibles-_retrieve_metadata_from_uri",
-        cache_exceptions=(MetadataRetrievalException,),
-    )  # 1 day
+    def get_metadata_cache_key(self, address: str, token_id: int):
+        return f"metadata:{address}:{token_id}"
+
     def _retrieve_metadata_from_uri(self, uri: str) -> Any:
         """
         Get metadata from URI. Currently just ipfs/http/https is supported
@@ -175,6 +178,7 @@ class CollectiblesService:
         :param uri: Metadata URI, like http://example.org/token/3 or ipfs://<keccak256>
         :return: Metadata as a decoded json
         """
+
         uri = ipfs_to_http(uri)
 
         if not uri or not uri.startswith("http"):
@@ -182,7 +186,7 @@ class CollectiblesService:
 
         try:
             logger.debug("Getting metadata for uri=%s", uri)
-            with requests.get(uri, timeout=10, stream=True) as response:
+            with requests.get(uri, timeout=15, stream=True) as response:
                 if not response.ok:
                     logger.debug("Cannot get metadata for uri=%s", uri)
                     raise MetadataRetrievalException(uri)
@@ -210,7 +214,7 @@ class CollectiblesService:
 
                 return response.json()
         except (IOError, ValueError) as e:
-            raise MetadataRetrievalException(uri) from e
+            raise MetadataRetrievalExceptionTimeout(uri) from e
 
     def build_collectible(
         self,
@@ -219,6 +223,13 @@ class CollectiblesService:
         token_id: int,
         token_metadata_uri: Optional[str],
     ) -> Collectible:
+        """
+        Build a collectible from the input parameters
+        :param token_info: information of collectible like name, symbol...
+        :param token_address:
+        :param token_id:
+        :param token_metadata_uri:
+        """
         if not token_metadata_uri:
             if token_address in CRYPTO_KITTIES_CONTRACT_ADDRESSES:
                 token_metadata_uri = f"https://api.cryptokitties.co/kitties/{token_id}"
@@ -235,7 +246,11 @@ class CollectiblesService:
             name, symbol, logo_uri, token_address, token_id, token_metadata_uri
         )
 
-    def get_metadata(self, collectible: Collectible) -> Any:
+    def get_metadata(self, collectible: Collectible | CollectibleWithMetadata) -> Any:
+        """
+        Return metadata for a collectible
+        :param collectible
+        """
         if tld := ENS_CONTRACTS_WITH_TLD.get(
             collectible.address
         ):  # Special case for ENS
@@ -244,113 +259,89 @@ class CollectiblesService:
                 "name": f"{label_name}.{tld}" if label_name else f".{tld}",
                 "description": ("" if label_name else "Unknown ")
                 + f".{tld} ENS Domain",
-                "image": self.ENS_IMAGE_URL,
+                "image": self.ens_image_url,
             }
 
         return self._retrieve_metadata_from_uri(collectible.uri)
-
-    def _filter_addresses(
-        self,
-        addresses_with_token_ids: Sequence[Tuple[ChecksumAddress, int]],
-        only_trusted: bool = False,
-        exclude_spam: bool = False,
-    ):
-        """
-        :param addresses_with_token_ids:
-        :param only_trusted:
-        :param exclude_spam:
-        :return: ERC721 tokens filtered by spam or trusted
-        """
-        addresses_set = {
-            address_with_token_id[0]
-            for address_with_token_id in addresses_with_token_ids
-        }
-        base_queryset = Token.objects.filter(
-            Q(address__in=addresses_set) | Q(events_bugged=True)
-        ).order_by("name")
-        if only_trusted:
-            addresses = list(
-                base_queryset.erc721()
-                .filter(trusted=True)
-                .values_list("address", flat=True)
-            )
-        elif exclude_spam:
-            addresses = list(
-                base_queryset.erc721()
-                .filter(spam=False)
-                .values_list("address", flat=True)
-            )
-        else:
-            # There could be some addresses that are not in the list
-            addresses = set()
-            for token in base_queryset:
-                if token.is_erc721():
-                    addresses.add(token.address)
-                if (
-                    token.address in addresses_set
-                ):  # events_bugged tokens might not be on the `addresses_set`
-                    addresses_set.remove(token.address)
-            # Add unknown addresses
-            addresses.union(addresses_set)
-
-        return [
-            address_with_token_id
-            for address_with_token_id in addresses_with_token_ids
-            if address_with_token_id[0] in addresses
-        ]
 
     def get_collectibles(
         self,
         safe_address: ChecksumAddress,
         only_trusted: bool = False,
         exclude_spam: bool = False,
-    ) -> List[Collectible]:
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> Tuple[List[Collectible], int]:
         """
         :param safe_address:
         :param only_trusted: If True, return balance only for trusted tokens
         :param exclude_spam: If True, exclude spam tokens
-        :return: Collectibles using the owner, addresses and the token_ids
+        :param limit: page size
+        :param offset: page position
+        :return: Collectibles (using the owner, addresses and the token_ids) and count (total of collectibles)
         """
 
         # Cache based on the number of erc721 events
         number_erc721_events = ERC721Transfer.objects.to_or_from(safe_address).count()
-        cache_key = f"collectibles:{safe_address}:{only_trusted}:{exclude_spam}:{number_erc721_events}"
+
+        if number_erc721_events == 0:
+            # No need for further DB/Cache calls
+            return [], 0
+
+        cache_key = f"collectibles:{safe_address}:{only_trusted}:{exclude_spam}:{limit}{offset}:{number_erc721_events}"
+        cache_key_count = (
+            f"collectibles_count:{safe_address}:{only_trusted}:{exclude_spam}"
+        )
         if collectibles := django_cache.get(cache_key):
-            return collectibles
+            count = django_cache.get(cache_key_count)
+            return collectibles, count
         else:
-            collectibles = self._get_collectibles(
-                safe_address, only_trusted, exclude_spam
+            collectibles, count = self._get_collectibles(
+                safe_address,
+                only_trusted,
+                exclude_spam,
+                limit=limit,
+                offset=offset,
             )
             django_cache.set(cache_key, collectibles, 60 * 10)  # 10 minutes cache
-            return collectibles
+            django_cache.set(cache_key_count, count, 60 * 10)  # 10 minutes cache
+            return collectibles, count
 
     def _get_collectibles(
         self,
         safe_address: ChecksumAddress,
         only_trusted: bool = False,
         exclude_spam: bool = False,
-    ) -> List[Collectible]:
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> Tuple[List[Collectible], int]:
         """
         :param safe_address:
         :param only_trusted: If True, return balance only for trusted tokens
         :param exclude_spam: If True, exclude spam tokens
-        :return: Collectibles using the owner, addresses and the token_ids
+        :param limit: page size
+        :param offset: page position
+        :return: Collectibles (using the owner, addresses and the token_ids) and count (total of collectibles)
         """
-        unfiltered_addresses_with_token_ids = ERC721Transfer.objects.erc721_owned_by(
-            safe_address
-        )
-        for address, _ in unfiltered_addresses_with_token_ids:
-            # Store tokens in database if not present
-            self.get_token_info(address)  # This is cached
-        addresses_with_token_ids = self._filter_addresses(
-            unfiltered_addresses_with_token_ids, only_trusted, exclude_spam
+        addresses_with_token_ids = ERC721Transfer.objects.erc721_owned_by(
+            safe_address, only_trusted=only_trusted, exclude_spam=exclude_spam
         )
         if not addresses_with_token_ids:
-            return []
+            return [], 0
+
+        count = len(addresses_with_token_ids)
+        # TODO Paginate on DB
+        if limit is not None:
+            addresses_with_token_ids = addresses_with_token_ids[offset : offset + limit]
+
+        for address, _ in addresses_with_token_ids:
+            # Store tokens in database if not present
+            self.get_token_info(address)  # This is cached
 
         logger.debug("Getting token_uris for %s", addresses_with_token_ids)
         # Chunk token uris to prevent stressing the node
         token_uris = []
+
         for addresses_with_token_ids_chunk in chunks(addresses_with_token_ids, 25):
             token_uris.extend(self.get_token_uris(addresses_with_token_ids_chunk))
         logger.debug("Got token_uris for %s", addresses_with_token_ids)
@@ -364,31 +355,69 @@ class CollectiblesService:
             )
             collectibles.append(collectible)
 
-        return collectibles
+        return collectibles, count
 
-    def get_collectibles_with_metadata(
+    def _get_collectibles_with_metadata(
         self,
         safe_address: ChecksumAddress,
         only_trusted: bool = False,
         exclude_spam: bool = False,
-    ) -> List[CollectibleWithMetadata]:
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> Tuple[List[CollectibleWithMetadata], int]:
         """
         Get collectibles using the owner, addresses and the token_ids
 
         :param safe_address:
         :param only_trusted: If True, return balance only for trusted tokens
         :param exclude_spam: If True, exclude spam tokens
-        :return:
+        :param limit: page size
+        :param offset: page position
+        :return: collectibles and count
         """
+
+        # Async retry for getting metadata if fetching fails
+        from ..tasks import retry_get_metadata_task
+
         collectibles_with_metadata: List[CollectibleWithMetadata] = []
-        collectibles = self.get_collectibles(
-            safe_address, only_trusted=only_trusted, exclude_spam=exclude_spam
+        collectibles, count = self.get_collectibles(
+            safe_address,
+            only_trusted=only_trusted,
+            exclude_spam=exclude_spam,
+            limit=limit,
+            offset=offset,
         )
-        jobs = [
-            gevent.spawn(self.get_metadata, collectible) for collectible in collectibles
+        metadata_cache_keys = [
+            self.get_metadata_cache_key(collectible.address, collectible.id)
+            for collectible in collectibles
         ]
+        cached_results = self.redis.mget(metadata_cache_keys)
+
+        collectibles_not_cached = []
+        jobs = []
+        for cached, collectible in zip(cached_results, collectibles):
+            if cached:
+                collectible_cache = json.loads(cached)
+                collectibles_with_metadata.append(
+                    CollectibleWithMetadata(
+                        collectible_cache["token_name"],
+                        collectible_cache["token_symbol"],
+                        collectible_cache["logo_uri"],
+                        collectible_cache["address"],
+                        collectible_cache["id"],
+                        collectible_cache["uri"],
+                        collectible_cache["metadata"],
+                    )
+                )
+            else:
+                collectibles_not_cached.append(collectible)
+                jobs.append(gevent.spawn(self.get_metadata, collectible))
+                collectibles_with_metadata.append(None)  # Keeps the order
+
         _ = gevent.joinall(jobs)
-        for collectible, job in zip(collectibles, jobs):
+        collectibles_with_metadata_not_cached = []
+        redis_pipe = self.redis.pipeline()
+        for collectible, job in zip(collectibles_not_cached, jobs):
             try:
                 metadata = job.get()
                 if not isinstance(metadata, dict):
@@ -405,22 +434,86 @@ class CollectiblesService:
                     collectible.uri,
                     collectible.address,
                 )
-
-            collectibles_with_metadata.append(
-                CollectibleWithMetadata(
-                    collectible.token_name,
-                    collectible.token_symbol,
-                    collectible.logo_uri,
-                    collectible.address,
-                    collectible.id,
+            except MetadataRetrievalExceptionTimeout:
+                metadata = {}
+                logger.warning(
+                    "Timeout retrieving metadata on token-uri=%s for token-address=%s, retrying asyncronous ",
                     collectible.uri,
-                    metadata,
+                    collectible.address,
                 )
+                retry_get_metadata_task.apply_async(
+                    (collectible.address, collectible.id),
+                    countdown=random.randint(0, 60),  # Don't retry all at once
+                )
+
+            collectible_with_metadata = CollectibleWithMetadata(
+                collectible.token_name,
+                collectible.token_symbol,
+                collectible.logo_uri,
+                collectible.address,
+                collectible.id,
+                collectible.uri,
+                metadata,
             )
-        return collectibles_with_metadata
+            collectibles_with_metadata_not_cached.append(collectible_with_metadata)
+            redis_pipe.set(
+                self.get_metadata_cache_key(collectible.address, collectible.id),
+                json.dumps(dataclasses.asdict(collectible_with_metadata)),
+                self.COLLECTIBLE_EXPIRATION,
+            )
+        redis_pipe.execute()
+
+        # Creates a collectibles metadata keeping the initial order
+        for collectible_metadata_cached_index in range(len(collectibles_with_metadata)):
+            if collectibles_with_metadata[collectible_metadata_cached_index] is None:
+                collectibles_with_metadata[
+                    collectible_metadata_cached_index
+                ] = collectibles_with_metadata_not_cached.pop(0)
+
+        return collectibles_with_metadata, count
+
+    def get_collectibles_with_metadata(
+        self,
+        safe_address: ChecksumAddress,
+        only_trusted: bool = False,
+        exclude_spam: bool = False,
+    ) -> List[CollectibleWithMetadata]:
+        """
+         Get collectibles v1 returns no paginated response
+        :param safe_address:
+        :param only_trusted: If True, return balance only for trusted tokens
+        :param exclude_spam: If True, exclude spam tokens
+        :return: collectibles
+        """
+        collectibles, _ = self._get_collectibles_with_metadata(
+            safe_address, only_trusted, exclude_spam
+        )
+        return collectibles
+
+    def get_collectibles_with_metadata_paginated(
+        self,
+        safe_address: ChecksumAddress,
+        only_trusted: bool = False,
+        exclude_spam: bool = False,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> Tuple[List[CollectibleWithMetadata], int]:
+        """
+        Get collectibles paginated
+
+        :param safe_address:
+        :param only_trusted: If True, return balance only for trusted tokens
+        :param exclude_spam: If True, exclude spam tokens
+        :param limit: page size
+        :param offset: page position
+        :return: collectibles and count
+        """
+        return self._get_collectibles_with_metadata(
+            safe_address, only_trusted, exclude_spam, limit, offset
+        )
 
     @cachedmethod(cache=operator.attrgetter("cache_token_info"))
-    @cache_memoize(60 * 60, prefix="collectibles-get_token_info")  # 1 hour
+    @cache_memoize(TOKEN_EXPIRATION, prefix="collectibles-get_token_info")  # 1 hour
     def get_token_info(
         self, token_address: ChecksumAddress
     ) -> Optional[Erc721InfoWithLogo]:
@@ -516,7 +609,7 @@ class CollectiblesService:
             }
             pipe.mset(redis_map_to_store)
             for key in redis_map_to_store.keys():
-                pipe.expire(key, 60 * 60 * 24)  # 1 day of caching
+                pipe.expire(key, self.COLLECTIBLE_EXPIRATION)
             pipe.execute()
             found_uris.update(blockchain_token_uris)
 

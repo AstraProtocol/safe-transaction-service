@@ -2,6 +2,7 @@ from typing import List, Optional, Sequence, Tuple
 from unittest import mock
 from unittest.mock import MagicMock
 
+from django.conf import settings
 from django.test import TestCase
 
 from eth_account import Account
@@ -57,7 +58,6 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
 
             # Caches empty
             self.assertFalse(collectibles_service.cache_token_info)
-            self.assertFalse(collectibles_service.cache_uri_metadata)
 
             safe_address = "0xfF501B324DC6d78dC9F983f140B9211c3EdB4dc7"
             ens_address = "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85"
@@ -68,7 +68,9 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
             dappcon_logo_uri = Token(
                 address=dappcon_2020_address, name="", symbol=""
             ).get_full_logo_uri()
-            self.assertEqual(collectibles_service.get_collectibles(safe_address), [])
+            self.assertEqual(
+                collectibles_service.get_collectibles(safe_address), ([], 0)
+            )
 
             erc721_addresses = [
                 (dappcon_2020_address, dappcon_token_id),
@@ -98,7 +100,7 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
                     uri="https://us-central1-thing-1d2be.cloudfunctions.net/getThing?thingId=Q1c8y3PwYomxjW25sW3l",
                 ),
             ]
-            collectibles = collectibles_service.get_collectibles(safe_address)
+            collectibles, _ = collectibles_service.get_collectibles(safe_address)
             self.assertEqual(len(collectibles), len(expected))
             self.assertCountEqual(collectibles, expected)
 
@@ -113,7 +115,7 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
                     metadata={
                         "name": "safe-multisig.eth",
                         "description": ".eth ENS Domain",
-                        "image": collectibles_service.ENS_IMAGE_URL,
+                        "image": settings.TOKENS_ENS_IMAGE_URL,
                     },
                 ),
                 CollectibleWithMetadata(
@@ -188,7 +190,6 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
 
             # Caches not empty
             self.assertTrue(collectibles_service.cache_token_info)
-            self.assertTrue(collectibles_service.cache_uri_metadata)
         finally:
             del EthereumClientProvider.instance
 
@@ -207,7 +208,7 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
             28,
             "http://random-address.org/info-28.json",
         )
-        get_collectibles_mock.return_value = [collectible]
+        get_collectibles_mock.return_value = [collectible], 0
         safe_address = Account.create().address
 
         expected = [
@@ -222,16 +223,19 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
             )
         ]
         self.assertListEqual(
-            collectibles_service.get_collectibles_with_metadata(safe_address), expected
+            collectibles_service.get_collectibles_with_metadata(safe_address),
+            expected,
         )
         get_metadata_mock.return_value = {}
         self.assertListEqual(
-            collectibles_service.get_collectibles_with_metadata(safe_address), expected
+            collectibles_service.get_collectibles_with_metadata(safe_address),
+            expected,
         )
 
         get_metadata_mock.side_effect = MetadataRetrievalException
         self.assertListEqual(
-            collectibles_service.get_collectibles_with_metadata(safe_address), expected
+            collectibles_service.get_collectibles_with_metadata(safe_address),
+            expected,
         )
         get_metadata_mock.side_effect = None
 
@@ -241,6 +245,9 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
             "image": "http://random-address.org/logo-28.png",
         }
         get_metadata_mock.return_value = metadata
+        # collectible cached by address + id
+        collectible.id += 1
+        get_collectibles_mock.return_value = [collectible], 0
         collectible_with_metadata = CollectibleWithMetadata(
             collectible.token_name,
             collectible.token_symbol,
@@ -256,8 +263,10 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
             collectible_with_metadata.image_uri, "http://random-address.org/logo-28.png"
         )
         expected = [collectible_with_metadata]
+
         self.assertListEqual(
-            collectibles_service.get_collectibles_with_metadata(safe_address), expected
+            collectibles_service.get_collectibles_with_metadata(safe_address),
+            expected,
         )
 
     @mock.patch.object(Erc721Manager, "get_info", autospec=True)
@@ -393,15 +402,7 @@ class TestCollectiblesService(EthereumTestCaseMixin, TestCase):
             "image": "https://ipfs.io/ipfs/QmXKU5RBTrGaYn5M1iWQaeKuCKV34g417YDGN5Yh7Uxk4i",
         }
 
-        try:
-            self.assertEqual(
-                collectibles_service._retrieve_metadata_from_uri(ipfs_address),
-                expected_object,
-            )
-        except MetadataRetrievalException:
-            # Test a different IPFS provider
-            with self.settings(IPFS_GATEWAY="https://ipfs.io/ipfs/"):
-                self.assertEqual(
-                    collectibles_service._retrieve_metadata_from_uri(ipfs_address),
-                    expected_object,
-                )
+        self.assertEqual(
+            collectibles_service._retrieve_metadata_from_uri(ipfs_address),
+            expected_object,
+        )
