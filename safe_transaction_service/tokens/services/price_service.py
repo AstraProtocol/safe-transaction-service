@@ -45,6 +45,7 @@ from ..clients import (
     CoingeckoClient,
     KrakenClient,
     KucoinClient,
+    TikiExchangeClient
 )
 from ..tasks import EthValueWithTimestamp, calculate_token_eth_price_task
 
@@ -84,6 +85,7 @@ class PriceService:
         self.coingecko_client = CoingeckoClient(self.ethereum_network)
         self.kraken_client = KrakenClient()
         self.kucoin_client = KucoinClient()
+        self.tiki_exchange_client = TikiExchangeClient()
         self.cache_eth_price = TTLCache(
             maxsize=2048, ttl=60 * 30
         )  # 30 minutes of caching
