@@ -248,7 +248,10 @@ class PriceService:
             EthereumNetwork.ARBITRUM_TESTNET,
         ):
             return self.get_aurora_usd_price()
-        elif self.ethereum_network == EthereumNetwork.ASTRA_TESTNET:
+        elif self.ethereum_network in (
+                EthereumNetwork.ASTRA_TESTNET,
+                EthereumNetwork.ASTRA_MAINNET
+        ):
             return self.get_astra_usd_price()
         elif self.ethereum_network in (
             EthereumNetwork.CRONOS_TESTNET,
