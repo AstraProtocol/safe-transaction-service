@@ -28,4 +28,5 @@ RUN set -ex \
         -exec rm -rf '{}' +
 
 COPY . .
-RUN DJANGO_SETTINGS_MODULE=config.settings.production DJANGO_DOT_ENV_FILE=.env python manage.py collectstatic --noinput
+# RUN DJANGO_SETTINGS_MODULE=config.settings.production DJANGO_DOT_ENV_FILE=.env python manage.py collectstatic --noinput
+CMD ["./docker/web/run_app.sh"]
