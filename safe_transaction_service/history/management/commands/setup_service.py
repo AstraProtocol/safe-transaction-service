@@ -291,8 +291,8 @@ MASTER_COPIES: Dict[EthereumNetwork, List[Tuple[str, int, str]]] = {
         ("0x69f4D1788e39c87893C980c06EdF4b7f686e2938", 93168, "1.3.0"),
     ],
     EthereumNetwork.ASTRA_TESTNET: [
-        ("0x33eF3698B7E794B249E5C94DAFCAc7FED509C663", 3833012, "1.3.0+L2"),
-        ("0x354B554d15Ede3D2Ba106aF24de98f132e1A53b6", 3833012, "1.3.0"),
+        ("0x28a734d2E26C4FAC9e26e9b4dDe9f201E9945cb0", 3833012, "1.3.0+L2"),
+        ("0x2764E96202A06B9A1399cee999E9c0C7bD08Bd99", 3833012, "1.3.0"),
     ],
     EthereumNetwork.KLAY_BAOBAB: [
         ("0xfb1bffC9d739B8D520DaF37dF666da4C687191EA", 93821635, "1.3.0+L2"),
@@ -479,7 +479,7 @@ PROXY_FACTORIES: Dict[EthereumNetwork, List[Tuple[str, int]]] = {
         ("0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC", 93108),  # v1.3.0
     ],
     EthereumNetwork.ASTRA_TESTNET: [
-        ("0x9ede2D10e78c22919Bc3C22F53aeB6923Cb53FaE", 3833012),  # v1.3.0
+        ("0x51843B6054Ae18803285E23e9d4708F448D5696b", 3833012),  # v1.3.0
     ],
     EthereumNetwork.KLAY_BAOBAB: [
         ("0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC", 93821613),  # v1.3.0
