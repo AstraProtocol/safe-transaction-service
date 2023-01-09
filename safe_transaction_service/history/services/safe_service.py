@@ -129,7 +129,9 @@ class SafeService:
         :raises: CannotGetSafeInfoFromBlockchain
         """
         try:
+            logger.info("hoank address", safe_address)
             safe_info = self.get_safe_info_from_db(safe_address)
+            logger.info("hoank", safe_info)
             if safe_info.nonce == 0:
                 # This works for:
                 # - Not indexed Safes
@@ -147,7 +149,7 @@ class SafeService:
         try:
             safe = Safe(safe_address, self.ethereum_client)
             safe_info = safe.retrieve_all_info()
-            print("hoank", safe_info)
+            logger.info("hoank", safe_info)
             # Return same master copy information than the db method
             return replace(
                 safe_info,
