@@ -147,6 +147,7 @@ class SafeService:
         try:
             safe = Safe(safe_address, self.ethereum_client)
             safe_info = safe.retrieve_all_info()
+            print("hoank", safe_info)
             # Return same master copy information than the db method
             return replace(
                 safe_info,
