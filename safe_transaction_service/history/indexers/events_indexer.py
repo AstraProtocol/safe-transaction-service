@@ -200,7 +200,7 @@ class EventsIndexer(EthereumIndexer):
             from_block_number,
             to_block_number,
             len_addresses,
-            addresses[:10],
+            addresses[:20],
         )
         return log_receipts
 
