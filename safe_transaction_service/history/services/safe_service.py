@@ -111,8 +111,6 @@ class SafeService:
             return None
         except IOError as exc:
             raise NodeConnectionException from exc
-        if safe_address == "0x471a7E3A64EEfcba22AFa135979d20F0cAcEC231":
-            master_copy = "0x28a734d2E26C4FAC9e26e9b4dDe9f201E9945cb0"
         return SafeCreationInfo(
             created_time,
             creator,
@@ -149,12 +147,15 @@ class SafeService:
             safe = Safe(safe_address, self.ethereum_client)
             safe_info = safe.retrieve_all_info()
             # Return same master copy information than the db method
-            return replace(
+            data = replace(
                 safe_info,
                 version=SafeMasterCopy.objects.get_version_for_address(
                     safe_info.master_copy
                 ),
             )
+            if safe_address == "0x471a7E3A64EEfcba22AFa135979d20F0cAcEC231" and "masterCopy" in data:
+                data["masterCopy"] = "0x28a734d2E26C4FAC9e26e9b4dDe9f201E9945cb0"
+            return data
         except IOError as exc:
             raise NodeConnectionException from exc
         except CannotRetrieveSafeInfoException as exc:
