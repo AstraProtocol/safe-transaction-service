@@ -153,8 +153,8 @@ class SafeService:
                     safe_info.master_copy
                 ),
             )
-            if safe_address == "0x471a7E3A64EEfcba22AFa135979d20F0cAcEC231" and "masterCopy" in data:
-                data["masterCopy"] = "0x28a734d2E26C4FAC9e26e9b4dDe9f201E9945cb0"
+            if safe_address == "0x471a7E3A64EEfcba22AFa135979d20F0cAcEC231":
+                data.master_copy = "0x28a734d2E26C4FAC9e26e9b4dDe9f201E9945cb0"
             return data
         except IOError as exc:
             raise NodeConnectionException from exc
