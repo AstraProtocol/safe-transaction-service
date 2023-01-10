@@ -291,7 +291,7 @@ MASTER_COPIES: Dict[EthereumNetwork, List[Tuple[str, int, str]]] = {
         ("0x69f4D1788e39c87893C980c06EdF4b7f686e2938", 93168, "1.3.0"),
     ],
     EthereumNetwork.ASTRA_TESTNET: [
-        ("0x2764E96202A06B9A1399cee999E9c0C7bD08Bd99", 0, "1.3.0+L2"),
+        ("0x28a734d2E26C4FAC9e26e9b4dDe9f201E9945cb0", 0, "1.3.0+L2"),
         ("0x2764E96202A06B9A1399cee999E9c0C7bD08Bd99", 0, "1.3.0"),
     ],
     EthereumNetwork.KLAY_BAOBAB: [
