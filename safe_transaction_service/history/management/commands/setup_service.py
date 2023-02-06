@@ -293,6 +293,9 @@ MASTER_COPIES: Dict[EthereumNetwork, List[Tuple[str, int, str]]] = {
     EthereumNetwork.ASTRA_TESTNET: [
         ("0x28a734d2E26C4FAC9e26e9b4dDe9f201E9945cb0", 0, "1.3.0+L2")
     ],
+    EthereumNetwork.ASTRA_MAINNET: [
+        ("0x32bf78c86E4E0ddC2FC713925E72312907F6eC5D", 0, "1.3.0+L2")
+    ],
     EthereumNetwork.KLAY_BAOBAB: [
         ("0xfb1bffC9d739B8D520DaF37dF666da4C687191EA", 93821635, "1.3.0+L2"),
     ],
@@ -479,6 +482,9 @@ PROXY_FACTORIES: Dict[EthereumNetwork, List[Tuple[str, int]]] = {
     ],
     EthereumNetwork.ASTRA_TESTNET: [
         ("0x51843B6054Ae18803285E23e9d4708F448D5696b", 0),  # v1.3.0
+    ],
+    EthereumNetwork.ASTRA_MAINNET: [
+        ("0x69ec99aadfA264008f1A6175575bcd0f19c5b3BE", 0),  # v1.3.0
     ],
     EthereumNetwork.KLAY_BAOBAB: [
         ("0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC", 93821613),  # v1.3.0
